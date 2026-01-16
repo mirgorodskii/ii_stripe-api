@@ -30,9 +30,9 @@ app.use(cors({
   credentials: true
 }));
 
-app.use(express.static('public'));
 app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
+app.use(express.static('public'));
 
 // Хранилище токенов доступа (в памяти)
 // Для продакшна лучше использовать Railway PostgreSQL
