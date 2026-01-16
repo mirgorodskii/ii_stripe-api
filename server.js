@@ -86,9 +86,9 @@ app.post('/api/create-checkout-session', async (req, res) => {
       ],
       mode: 'payment',
       
-      // После успешной оплаты перенаправляем на Codepen с токеном
-      success_url: `${process.env.FRONTEND_URL}/success?token=${accessToken}`,
-      cancel_url: `${process.env.FRONTEND_URL}/cancel`,
+      // После успешной оплаты перенаправляем на главную с токеном
+      success_url: `${process.env.FRONTEND_URL}?token=${accessToken}`,
+      cancel_url: `${process.env.FRONTEND_URL}`,
       
       customer_email: email,
       
