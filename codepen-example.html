@@ -1,0 +1,410 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Эксклюзивный контент</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 20px;
+      padding: 40px;
+      max-width: 600px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 20px;
+    }
+
+    .price {
+      color: #667eea;
+      font-size: 48px;
+      font-weight: bold;
+      margin: 20px 0;
+    }
+
+    .features {
+      list-style: none;
+      margin: 30px 0;
+    }
+
+    .features li {
+      padding: 10px 0;
+      padding-left: 30px;
+      position: relative;
+      color: #555;
+    }
+
+    .features li:before {
+      content: "✓";
+      position: absolute;
+      left: 0;
+      color: #667eea;
+      font-weight: bold;
+      font-size: 20px;
+    }
+
+    input[type="email"] {
+      width: 100%;
+      padding: 12px;
+      border: 2px solid #e0e0e0;
+      border-radius: 8px;
+      font-size: 16px;
+      margin-bottom: 20px;
+      transition: border-color 0.3s;
+    }
+
+    input[type="email"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    .buy-button {
+      width: 100%;
+      padding: 16px;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 18px;
+      font-weight: bold;
+      cursor: pointer;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+
+    .buy-button:hover:not(:disabled) {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 20px rgba(102, 126, 234, 0.4);
+    }
+
+    .buy-button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 20px;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+    }
+
+    .status.error {
+      background: #fee;
+      color: #c00;
+      border: 1px solid #fcc;
+    }
+
+    .status.success {
+      background: #efe;
+      color: #090;
+      border: 1px solid #cfc;
+    }
+
+    .premium-content {
+      display: none;
+    }
+
+    .premium-content.active {
+      display: block;
+    }
+
+    .content-box {
+      background: #f0f9ff;
+      padding: 20px;
+      border-radius: 10px;
+      margin: 20px 0;
+      border-left: 4px solid #667eea;
+    }
+
+    .content-box h3 {
+      color: #667eea;
+      margin-bottom: 10px;
+    }
+
+    .content-box ul {
+      list-style: none;
+      padding: 0;
+    }
+
+    .content-box li {
+      padding: 8px 0;
+    }
+
+    .content-box a {
+      color: #667eea;
+      text-decoration: none;
+    }
+
+    .content-box a:hover {
+      text-decoration: underline;
+    }
+
+    .loader {
+      border: 3px solid #f3f3f3;
+      border-top: 3px solid #667eea;
+      border-radius: 50%;
+      width: 20px;
+      height: 20px;
+      animation: spin 1s linear infinite;
+      display: inline-block;
+      margin-left: 10px;
+    }
+
+    @keyframes spin {
+      0% { transform: rotate(0deg); }
+      100% { transform: rotate(360deg); }
+    }
+
+    .success-icon {
+      font-size: 60px;
+      text-align: center;
+      margin-bottom: 20px;
+    }
+
+    small {
+      color: #888;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Заблокированный контент -->
+    <div id="locked-section">
+      <h1>🔒 Эксклюзивный контент</h1>
+      <div class="price">$20</div>
+      
+      <ul class="features">
+        <li>Полный доступ к контенту</li>
+        <li>Эксклюзивные материалы</li>
+        <li>Видео уроки</li>
+        <li>Документация и гайды</li>
+        <li>Пожизненный доступ</li>
+      </ul>
+
+      <input 
+        type="email" 
+        id="userEmail" 
+        placeholder="Ваш email (опционально)"
+      >
+      
+      <button id="buyButton" class="buy-button">
+        Купить сейчас
+      </button>
+
+      <div id="status"></div>
+    </div>
+
+    <!-- Премиум контент (показывается после оплаты) -->
+    <div id="premium-section" class="premium-content">
+      <div class="success-icon">✅</div>
+      <h1>Добро пожаловать!</h1>
+      <p>У вас есть полный доступ к эксклюзивному контенту!</p>
+      
+      <div id="contentDisplay"></div>
+      
+      <small id="accessInfo"></small>
+    </div>
+  </div>
+
+  <script>
+    // ⚠️ ВАЖНО: Замени на URL своего Railway сервиса!
+    const API_URL = 'https://your-service.railway.app';
+    
+    const buyButton = document.getElementById('buyButton');
+    const userEmailInput = document.getElementById('userEmail');
+    const statusDiv = document.getElementById('status');
+    const lockedSection = document.getElementById('locked-section');
+    const premiumSection = document.getElementById('premium-section');
+    const contentDisplay = document.getElementById('contentDisplay');
+    const accessInfo = document.getElementById('accessInfo');
+
+    // При загрузке страницы проверяем доступ
+    window.addEventListener('DOMContentLoaded', () => {
+      checkAccessFromURL();
+      checkSavedToken();
+    });
+
+    // Обработчик кнопки покупки
+    buyButton.addEventListener('click', async () => {
+      const email = userEmailInput.value.trim();
+      
+      // Валидация email (опционально)
+      if (email && !isValidEmail(email)) {
+        showStatus('Введите корректный email', 'error');
+        return;
+      }
+
+      buyButton.disabled = true;
+      buyButton.innerHTML = 'Создаем платеж...<span class="loader"></span>';
+
+      try {
+        const response = await fetch(`${API_URL}/api/create-checkout-session`, {
+          method: 'POST',
+          headers: { 
+            'Content-Type': 'application/json' 
+          },
+          body: JSON.stringify({ 
+            email: email || undefined 
+          })
+        });
+
+        const data = await response.json();
+
+        if (data.url) {
+          // Перенаправляем на Stripe Checkout
+          window.location.href = data.url;
+        } else {
+          throw new Error('No checkout URL received');
+        }
+      } catch (error) {
+        console.error('Error:', error);
+        showStatus('Ошибка при создании платежа. Попробуйте еще раз.', 'error');
+        buyButton.disabled = false;
+        buyButton.innerHTML = 'Купить сейчас';
+      }
+    });
+
+    // Проверка токена из URL (после оплаты)
+    async function checkAccessFromURL() {
+      const urlParams = new URLSearchParams(window.location.search);
+      const token = urlParams.get('token');
+      
+      if (!token) return;
+
+      // Показываем загрузку
+      showStatus('Проверяем доступ...', 'success');
+
+      try {
+        const response = await fetch(`${API_URL}/api/verify-access/${token}`);
+        const data = await response.json();
+
+        if (data.valid) {
+          // Сохраняем токен
+          localStorage.setItem('accessToken', token);
+          
+          // Загружаем контент
+          await loadPremiumContent(token);
+          
+          // Очищаем URL (убираем токен)
+          window.history.replaceState({}, document.title, window.location.pathname);
+        } else {
+          showStatus(`Ошибка доступа: ${data.error}`, 'error');
+        }
+      } catch (error) {
+        console.error('Error verifying access:', error);
+        showStatus('Не удалось проверить доступ. Попробуйте позже.', 'error');
+      }
+    }
+
+    // Проверка сохраненного токена
+    async function checkSavedToken() {
+      const savedToken = localStorage.getItem('accessToken');
+      
+      if (!savedToken) return;
+      
+      // Проверяем, что токен еще валиден
+      try {
+        const response = await fetch(`${API_URL}/api/verify-access/${savedToken}`);
+        const data = await response.json();
+
+        if (data.valid) {
+          await loadPremiumContent(savedToken);
+        } else {
+          // Токен невалиден - удаляем
+          localStorage.removeItem('accessToken');
+        }
+      } catch (error) {
+        console.error('Error checking saved token:', error);
+      }
+    }
+
+    // Загрузка премиум контента
+    async function loadPremiumContent(token) {
+      try {
+        const response = await fetch(`${API_URL}/api/protected-content/${token}`);
+        const data = await response.json();
+
+        if (response.ok) {
+          // Скрываем форму покупки
+          lockedSection.style.display = 'none';
+          
+          // Показываем премиум контент
+          premiumSection.classList.add('active');
+
+          // Отображаем контент
+          contentDisplay.innerHTML = `
+            <div class="content-box">
+              <h3>${data.content.message}</h3>
+            </div>
+            
+            <div class="content-box">
+              <h3>📹 Видео материалы:</h3>
+              <ul>
+                ${data.content.videos.map(v => `
+                  <li><a href="${v}" target="_blank">${v.split('/').pop()}</a></li>
+                `).join('')}
+              </ul>
+            </div>
+            
+            <div class="content-box">
+              <h3>📄 Документы:</h3>
+              <ul>
+                ${data.content.documents.map(d => `
+                  <li><a href="${d}" target="_blank">${d.split('/').pop()}</a></li>
+                `).join('')}
+              </ul>
+            </div>
+          `;
+
+          // Показываем информацию о доступе
+          accessInfo.textContent = `Доступ активирован: ${new Date(data.accessInfo.activatedAt).toLocaleDateString('ru-RU')}`;
+          
+        } else {
+          showStatus('Не удалось загрузить контент', 'error');
+        }
+      } catch (error) {
+        console.error('Error loading content:', error);
+        showStatus('Ошибка загрузки контента', 'error');
+      }
+    }
+
+    // Показать статус сообщение
+    function showStatus(message, type) {
+      statusDiv.innerHTML = message;
+      statusDiv.className = `status ${type}`;
+      
+      if (type === 'error') {
+        setTimeout(() => {
+          statusDiv.innerHTML = '';
+          statusDiv.className = 'status';
+        }, 5000);
+      }
+    }
+
+    // Валидация email
+    function isValidEmail(email) {
+      return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    }
+  </script>
+</body>
+</html>

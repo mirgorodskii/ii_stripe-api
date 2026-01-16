@@ -1,0 +1,247 @@
+require('dotenv').config();
+const express = require('express');
+const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+const cors = require('cors');
+const crypto = require('crypto');
+
+const app = express();
+
+// Middleware
+app.use(cors({
+  origin: process.env.FRONTEND_URL || '*', // URL твоего Codepen
+  credentials: true
+}));
+
+app.use(express.static('public'));
+app.use('/webhook', express.raw({ type: 'application/json' }));
+app.use(express.json());
+
+// Хранилище токенов доступа (в памяти)
+// Для продакшна лучше использовать Railway PostgreSQL
+const accessTokens = new Map();
+
+// Генерация уникального токена
+function generateAccessToken() {
+  return crypto.randomBytes(32).toString('hex');
+}
+
+// Health check для Railway
+app.get('/', (req, res) => {
+  res.json({ 
+    status: 'ok',
+    service: 'Stripe Payment API',
+    activeTokens: accessTokens.size
+  });
+});
+
+// 1. Создание Stripe Checkout сессии
+app.post('/api/create-checkout-session', async (req, res) => {
+  try {
+    const { email } = req.body; // Опционально
+
+    // Генерируем токен заранее
+    const accessToken = generateAccessToken();
+
+    const session = await stripe.checkout.sessions.create({
+      payment_method_types: ['card'],
+      line_items: [
+        {
+          price_data: {
+            currency: 'usd',
+            product_data: {
+              name: 'Доступ к эксклюзивному контенту',
+              description: 'Полный доступ к закрытому разделу',
+            },
+            unit_amount: 2000, // $20.00 (измени на свою цену)
+          },
+          quantity: 1,
+        },
+      ],
+      mode: 'payment',
+      
+      // После успешной оплаты перенаправляем на Codepen с токеном
+      success_url: `${process.env.FRONTEND_URL}/success?token=${accessToken}`,
+      cancel_url: `${process.env.FRONTEND_URL}/cancel`,
+      
+      customer_email: email,
+      
+      // Сохраняем токен в metadata
+      metadata: {
+        accessToken: accessToken,
+      },
+    });
+
+    // Временно резервируем токен (будет активирован при webhook)
+    accessTokens.set(accessToken, {
+      status: 'pending',
+      sessionId: session.id,
+      createdAt: new Date(),
+    });
+
+    res.json({ 
+      sessionId: session.id, 
+      url: session.url 
+    });
+    
+  } catch (error) {
+    console.error('Error creating checkout session:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 2. Webhook - активация токена после оплаты
+app.post('/api/webhook', async (req, res) => {
+  const sig = req.headers['stripe-signature'];
+  const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  let event;
+
+  try {
+    event = stripe.webhooks.constructEvent(req.body, sig, webhookSecret);
+  } catch (err) {
+    console.error('⚠️ Webhook signature verification failed:', err.message);
+    return res.status(400).send(`Webhook Error: ${err.message}`);
+  }
+
+  // Обработка успешной оплаты
+  if (event.type === 'checkout.session.completed') {
+    const session = event.data.object;
+    const accessToken = session.metadata.accessToken;
+    
+    console.log('✅ Payment successful! Activating token:', accessToken);
+    
+    // Активируем токен
+    if (accessTokens.has(accessToken)) {
+      accessTokens.set(accessToken, {
+        status: 'active',
+        sessionId: session.id,
+        customerEmail: session.customer_email,
+        amountPaid: session.amount_total / 100,
+        activatedAt: new Date(),
+        expiresAt: null, // Пожизненный доступ (или установи срок)
+      });
+      
+      console.log(`Token ${accessToken} activated for ${session.customer_email}`);
+    }
+  }
+
+  res.json({ received: true });
+});
+
+// 3. Проверка токена доступа (вызывается с frontend)
+app.get('/api/verify-access/:token', (req, res) => {
+  const token = req.params.token;
+  const access = accessTokens.get(token);
+  
+  if (!access) {
+    return res.status(404).json({ 
+      valid: false, 
+      error: 'Token not found' 
+    });
+  }
+  
+  if (access.status !== 'active') {
+    return res.status(403).json({ 
+      valid: false, 
+      error: 'Token not activated yet' 
+    });
+  }
+  
+  // Проверка истечения срока (если установлен)
+  if (access.expiresAt && new Date() > access.expiresAt) {
+    return res.status(403).json({ 
+      valid: false, 
+      error: 'Token expired' 
+    });
+  }
+  
+  // Токен валидный
+  res.json({
+    valid: true,
+    activatedAt: access.activatedAt,
+    customerEmail: access.customerEmail,
+  });
+});
+
+// 4. Получение защищенного контента
+app.get('/api/protected-content/:token', (req, res) => {
+  const token = req.params.token;
+  const access = accessTokens.get(token);
+  
+  if (!access || access.status !== 'active') {
+    return res.status(403).json({ 
+      error: 'Access denied. Invalid or inactive token.' 
+    });
+  }
+  
+  // Возвращаем защищенный контент
+  res.json({
+    content: {
+      message: 'Добро пожаловать в закрытый раздел!',
+      videos: [
+        'https://example.com/video1.mp4',
+        'https://example.com/video2.mp4'
+      ],
+      documents: [
+        'https://example.com/guide.pdf'
+      ],
+      specialFeatures: true
+    },
+    accessInfo: {
+      activatedAt: access.activatedAt,
+      email: access.customerEmail
+    }
+  });
+});
+
+// 5. Статистика (опционально, для проверки)
+app.get('/api/stats', (req, res) => {
+  const stats = {
+    totalTokens: accessTokens.size,
+    activeTokens: Array.from(accessTokens.values()).filter(t => t.status === 'active').length,
+    pendingTokens: Array.from(accessTokens.values()).filter(t => t.status === 'pending').length,
+  };
+  
+  res.json(stats);
+});
+
+// Очистка истекших токенов каждый час
+setInterval(() => {
+  const now = new Date();
+  let cleaned = 0;
+  
+  for (const [token, data] of accessTokens.entries()) {
+    // Удаляем pending токены старше 24 часов
+    if (data.status === 'pending') {
+      const age = now - new Date(data.createdAt);
+      if (age > 24 * 60 * 60 * 1000) {
+        accessTokens.delete(token);
+        cleaned++;
+      }
+    }
+    
+    // Удаляем истекшие токены
+    if (data.expiresAt && now > data.expiresAt) {
+      accessTokens.delete(token);
+      cleaned++;
+    }
+  }
+  
+  if (cleaned > 0) {
+    console.log(`🧹 Cleaned ${cleaned} expired tokens`);
+  }
+}, 60 * 60 * 1000); // Каждый час
+
+// Запуск сервера
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => {
+  console.log(`🚀 Stripe API running on port ${PORT}`);
+  console.log(`📝 Webhook: http://localhost:${PORT}/api/webhook`);
+  console.log(`🔐 Active tokens: ${accessTokens.size}`);
+});
+
+// Graceful shutdown
+process.on('SIGTERM', () => {
+  console.log('⚠️ SIGTERM received, shutting down gracefully...');
+  process.exit(0);
+});
