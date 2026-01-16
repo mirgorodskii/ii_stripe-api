@@ -24,13 +24,16 @@ if (process.env.STRIPE_SECRET_KEY) {
   console.warn('⚠️ Stripe not initialized - missing STRIPE_SECRET_KEY');
 }
 
+// КРИТИЧНО: Webhook ДОЛЖЕН быть ПЕРВЫМ (до всех других middleware)
+// Stripe требует raw body для проверки подписи
+app.use('/api/webhook', express.raw({ type: 'application/json' }));
+
 // Middleware
 app.use(cors({
-  origin: process.env.FRONTEND_URL || '*', // URL твоего Codepen
+  origin: process.env.FRONTEND_URL || '*',
   credentials: true
 }));
 
-app.use('/webhook', express.raw({ type: 'application/json' }));
 app.use(express.json());
 app.use(express.static('public'));
 
@@ -84,7 +87,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
       mode: 'payment',
       
       // После успешной оплаты перенаправляем на Codepen с токеном
-      success_url: `${process.env.FRONTEND_URL}?token=${accessToken}`,
+      success_url: `${process.env.FRONTEND_URL}/success?token=${accessToken}`,
       cancel_url: `${process.env.FRONTEND_URL}/cancel`,
       
       customer_email: email,
