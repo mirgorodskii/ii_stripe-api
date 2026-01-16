@@ -1,10 +1,28 @@
 require('dotenv').config();
 const express = require('express');
-const stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
 const cors = require('cors');
 const crypto = require('crypto');
 
 const app = express();
+
+// Проверка обязательных переменных окружения
+const requiredEnvVars = ['STRIPE_SECRET_KEY'];
+const missingEnvVars = requiredEnvVars.filter(varName => !process.env[varName]);
+
+if (missingEnvVars.length > 0) {
+  console.error('❌ Missing required environment variables:', missingEnvVars.join(', '));
+  console.error('Please set these variables in Railway Dashboard → Variables');
+  console.error('Example: STRIPE_SECRET_KEY=sk_test_...');
+}
+
+// Инициализируем Stripe только если ключ есть
+let stripe;
+if (process.env.STRIPE_SECRET_KEY) {
+  stripe = require('stripe')(process.env.STRIPE_SECRET_KEY);
+  console.log('✅ Stripe initialized');
+} else {
+  console.warn('⚠️ Stripe not initialized - missing STRIPE_SECRET_KEY');
+}
 
 // Middleware
 app.use(cors({
@@ -37,6 +55,12 @@ app.get('/', (req, res) => {
 // 1. Создание Stripe Checkout сессии
 app.post('/api/create-checkout-session', async (req, res) => {
   try {
+    if (!stripe) {
+      return res.status(500).json({ 
+        error: 'Stripe is not configured. Please set STRIPE_SECRET_KEY in environment variables.' 
+      });
+    }
+
     const { email } = req.body; // Опционально
 
     // Генерируем токен заранее
@@ -91,8 +115,22 @@ app.post('/api/create-checkout-session', async (req, res) => {
 
 // 2. Webhook - активация токена после оплаты
 app.post('/api/webhook', async (req, res) => {
+  if (!stripe) {
+    console.error('⚠️ Webhook called but Stripe is not configured');
+    return res.status(500).json({ 
+      error: 'Stripe is not configured' 
+    });
+  }
+
   const sig = req.headers['stripe-signature'];
   const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
+
+  if (!webhookSecret) {
+    console.error('⚠️ STRIPE_WEBHOOK_SECRET is not set');
+    return res.status(500).json({ 
+      error: 'Webhook secret is not configured' 
+    });
+  }
 
   let event;
 
