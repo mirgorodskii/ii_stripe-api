@@ -70,7 +70,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
     const accessToken = generateAccessToken();
 
     const session = await stripe.checkout.sessions.create({
-      payment_method_types: ['card', 'apple_pay', 'google_pay', 'link'],
+      // Stripe автоматически показывает все включенные методы (Apple Pay, Google Pay, Link, etc)
       line_items: [
         {
           price_data: {
@@ -79,7 +79,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
               name: 'Доступ к эксклюзивному контенту',
               description: 'Полный доступ к закрытому разделу',
             },
-            unit_amount: 50, // $0.50 (измени на свою цену)
+            unit_amount: 50, // $0.50 для теста продакшна (потом измени на нужную цену)
           },
           quantity: 1,
         },
