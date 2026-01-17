@@ -79,7 +79,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
               name: 'Доступ к эксклюзивному контенту',
               description: 'Полный доступ к закрытому разделу',
             },
-            unit_amount: 2000, // $20.00 (измени на свою цену)
+            unit_amount: 50, // $0.50 (измени на свою цену)
           },
           quantity: 1,
         },
