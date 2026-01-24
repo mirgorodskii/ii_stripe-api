@@ -76,10 +76,10 @@ app.post('/api/create-checkout-session', async (req, res) => {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: 'Доступ к эксклюзивному контенту',
-              description: 'Полный доступ к закрытому разделу',
+              name: 'Hypnologue',
+              description: 'Full introspection experience ',
             },
-            unit_amount: 50, // $0.50 для теста продакшна (потом измени на нужную цену)
+            unit_amount: 500, // $5 для теста продакшна (потом измени на нужную цену)
           },
           quantity: 1,
         },
