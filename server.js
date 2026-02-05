@@ -55,7 +55,7 @@ app.get('/', (req, res) => {
   });
 });
 
-// 1. Создание Stripe Checkout сессии
+// 1. Создание Stripe Checkout сессии с динамической суммой
 app.post('/api/create-checkout-session', async (req, res) => {
   try {
     if (!stripe) {
@@ -64,7 +64,37 @@ app.post('/api/create-checkout-session', async (req, res) => {
       });
     }
 
-    const { email } = req.body; // Опционально
+    const { email, amount } = req.body;
+
+    // Backward compatibility: если amount не передан, используем дефолтную цену
+    let donationAmount;
+    
+    if (amount === undefined || amount === null) {
+      // Дефолтная цена для старого frontend
+      donationAmount = 2000; // $20.00
+      console.log('⚠️ No amount provided, using default: $20.00');
+    } else {
+      // Валидация суммы от пользователя
+      donationAmount = parseInt(amount);
+      
+      if (!donationAmount || isNaN(donationAmount)) {
+        return res.status(400).json({ 
+          error: 'Please provide a valid amount' 
+        });
+      }
+      
+      if (donationAmount < 50) { // Минимум $0.50
+        return res.status(400).json({ 
+          error: 'Minimum amount is $0.50' 
+        });
+      }
+      
+      if (donationAmount > 999999) { // Максимум $9,999.99
+        return res.status(400).json({ 
+          error: 'Maximum amount is $9,999.99' 
+        });
+      }
+    }
 
     // Генерируем токен заранее
     const accessToken = generateAccessToken();
@@ -76,10 +106,10 @@ app.post('/api/create-checkout-session', async (req, res) => {
           price_data: {
             currency: 'usd',
             product_data: {
-              name: 'Hypnologue',
-              description: 'Full introspection experience ',
+              name: `Support - $${(donationAmount / 100).toFixed(2)}`,
+              description: 'Thank you for your support! Get access to exclusive content.',
             },
-            unit_amount: 500, // $5 для теста продакшна (потом измени на нужную цену)
+            unit_amount: donationAmount, // Динамическая цена от пользователя (в центах)
           },
           quantity: 1,
         },
@@ -92,9 +122,10 @@ app.post('/api/create-checkout-session', async (req, res) => {
       
       customer_email: email,
       
-      // Сохраняем токен в metadata
+      // Сохраняем токен и сумму в metadata
       metadata: {
         accessToken: accessToken,
+        donationAmount: donationAmount,
       },
     });
 
@@ -103,6 +134,7 @@ app.post('/api/create-checkout-session', async (req, res) => {
       status: 'pending',
       sessionId: session.id,
       createdAt: new Date(),
+      amount: donationAmount,
     });
 
     res.json({ 
@@ -148,8 +180,10 @@ app.post('/api/webhook', async (req, res) => {
   if (event.type === 'checkout.session.completed') {
     const session = event.data.object;
     const accessToken = session.metadata.accessToken;
+    const donationAmount = parseInt(session.metadata.donationAmount);
     
     console.log('✅ Payment successful! Activating token:', accessToken);
+    console.log('💰 Amount paid:', `$${(donationAmount / 100).toFixed(2)}`);
     
     // Активируем токен
     if (accessTokens.has(accessToken)) {
@@ -201,6 +235,7 @@ app.get('/api/verify-access/:token', (req, res) => {
     valid: true,
     activatedAt: access.activatedAt,
     customerEmail: access.customerEmail,
+    amountPaid: access.amountPaid,
   });
 });
 
@@ -218,29 +253,55 @@ app.get('/api/protected-content/:token', (req, res) => {
   // Возвращаем защищенный контент
   res.json({
     content: {
-      message: 'Добро пожаловать в закрытый раздел!',
+      message: 'Спасибо за вашу поддержку! Добро пожаловать в закрытый раздел!',
       videos: [
-        'https://example.com/video1.mp4',
-        'https://example.com/video2.mp4'
+        'https://example.com/exclusive-video-1.mp4',
+        'https://example.com/exclusive-video-2.mp4',
+        'https://example.com/exclusive-video-3.mp4'
       ],
       documents: [
-        'https://example.com/guide.pdf'
+        'https://example.com/exclusive-guide.pdf',
+        'https://example.com/bonus-content.pdf'
       ],
       specialFeatures: true
     },
     accessInfo: {
       activatedAt: access.activatedAt,
-      email: access.customerEmail
+      email: access.customerEmail,
+      amountPaid: access.amountPaid
     }
   });
 });
 
-// 5. Статистика (опционально, для проверки)
+// 5. Проверка статуса сессии
+app.get('/api/check-session/:sessionId', async (req, res) => {
+  try {
+    if (!stripe) {
+      return res.status(500).json({ error: 'Stripe not configured' });
+    }
+    
+    const session = await stripe.checkout.sessions.retrieve(req.params.sessionId);
+    
+    res.json({
+      status: session.payment_status,
+      customerEmail: session.customer_email,
+      userId: session.metadata.userId,
+      amountPaid: session.amount_total / 100,
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 6. Статистика (опционально, для проверки)
 app.get('/api/stats', (req, res) => {
   const stats = {
     totalTokens: accessTokens.size,
     activeTokens: Array.from(accessTokens.values()).filter(t => t.status === 'active').length,
     pendingTokens: Array.from(accessTokens.values()).filter(t => t.status === 'pending').length,
+    totalRevenue: Array.from(accessTokens.values())
+      .filter(t => t.status === 'active' && t.amountPaid)
+      .reduce((sum, t) => sum + t.amountPaid, 0),
   };
   
   res.json(stats);
